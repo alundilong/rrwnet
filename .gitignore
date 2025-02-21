@@ -1,2 +1,6 @@
 __*/
 venv/
+shared_data
+predictions
+data/enhanced/
+*.vti
