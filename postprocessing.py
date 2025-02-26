@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from skimage.morphology import skeletonize
 from mpl_toolkits.mplot3d import Axes3D
+from scipy.ndimage import distance_transform_edt
 
 import sys
 import os
@@ -21,6 +22,13 @@ from lv_set.save_image import dump_image_to_vtk
 # Load the image
 image_path = "predictions/01.png"
 image = cv2.imread(image_path)
+
+# Set channel 1 (Green) and channel 2 (Red) to zero
+# zerorize channel 1 and 2
+image[:, :, 0] = 0  # Green Channel
+image[:, :, 1] = 0  # Red Channel Artery
+# image[:, :, 2] = 0  # Red Channel Vein
+
 image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
 
 # Apply Otsu's thresholding to binarize vessels
@@ -31,9 +39,11 @@ binary_vessels = thresh > 0
 
 # Apply skeletonization to extract vessel centerlines
 skeletonized_vessels = skeletonize(binary_vessels)
+# Compute Euclidean Distance Transform (EDT)
+distance_transform = distance_transform_edt(binary_vessels)
 
 # Display results
-fig, ax = plt.subplots(1, 4, figsize=(12, 6))
+fig, ax = plt.subplots(1, 5, figsize=(12, 6))
 ax[0].imshow(thresh, cmap="gray")
 ax[0].set_title("Thresholded Vessel Segmentation")
 ax[0].axis("off")
@@ -50,7 +60,11 @@ ax[3].imshow(image_gray, cmap="gray")
 ax[3].set_title("Gray Image")
 ax[3].axis("off")
 
-# plt.show()
+ax[4].imshow(distance_transform, cmap="gray")
+ax[4].set_title("Distance Image")
+ax[4].axis("off")
+
+plt.show()
 
 # Get image dimensions
 height, width = skeletonized_vessels.shape
@@ -61,10 +75,13 @@ radius = max(width, height) // 2  # Sphere radius
 
 # Extract skeleton points (centerline pixels)
 y_indices, x_indices = np.where(skeletonized_vessels)
+radii_at_skeleton = distance_transform[y_indices, x_indices]
 
 # Convert (x, y) to sphere coordinates (mapping to z-positive hemisphere)
 sphere_points = []
-for x, y in zip(x_indices, y_indices):
+sphere_points_radius = []
+
+for i, (x, y) in enumerate(zip(x_indices, y_indices)):
     # Normalize coordinates to the range [-1, 1] relative to the center
     nx = (x - cx) / radius
     ny = (y - cy) / radius
@@ -73,9 +90,12 @@ for x, y in zip(x_indices, y_indices):
     if nx**2 + ny**2 <= 1:  # Ensure points are within the unit circle
         nz = np.sqrt(1 - (nx**2 + ny**2))  # z is positive for upper hemisphere
         sphere_points.append([nx * radius, ny * radius, nz * radius])
+        sphere_points_radius.append(radii_at_skeleton[i])
 
 # Convert to numpy array for easier processing
 sphere_points = np.array(sphere_points)
+sphere_points_radius = np.array(sphere_points_radius)
+print(sphere_points_radius.min(), sphere_points_radius.max())
 
 # 3D Plotting
 fig = plt.figure(figsize=(8, 8))
@@ -91,10 +111,8 @@ ax.set_xlim([-radius, radius])
 ax.set_ylim([-radius, radius])
 ax.set_zlim([0, radius])  # Only positive z values
 
-# plt.show()
-
-# Convert to NumPy array
-sphere_points = np.array(sphere_points)
+plt.show()
+# exit(1)
 
 extend = (np.max(sphere_points, axis=0) - np.min(sphere_points, axis=0))*0.1
 
@@ -103,7 +121,7 @@ min_bound = np.min(sphere_points, axis=0) - extend
 max_bound = np.max(sphere_points, axis=0) + extend
 
 # Define voxel grid resolution
-voxel_size = radius / 200
+voxel_size = radius / 300
 
 # Compute grid dimensions based on the bounding box
 grid_x = np.arange(min_bound[0], max_bound[0], voxel_size)
@@ -119,12 +137,11 @@ voxel_id_array = []
 radius_array = []
 
 # Define a default radius for each point
-default_radius = -1
-max_radius = 1
+max_radius = sphere_points_radius.max()
 
 # Assign each 3D point to the closest voxel and store its radius
 for point_idx, (px, py, pz) in enumerate(sphere_points):
-    voxel_radius = default_radius  # Assign a default radius (can be customized per point)
+    voxel_radius = -sphere_points_radius[point_idx]  # Assign a default radius (can be customized per point)
 
     # Convert world coordinates to voxel indices
     idx_x = np.searchsorted(grid_x, px)
