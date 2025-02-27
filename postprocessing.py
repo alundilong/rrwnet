@@ -8,6 +8,8 @@ from scipy.ndimage import distance_transform_edt
 import sys
 import os
 
+from post_utils import extract_segments
+
 # Get the parent directory of the current script (assuming project-root is the common parent)
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # Add level set package to the Python path
@@ -38,7 +40,25 @@ _, thresh = cv2.threshold(image_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTS
 binary_vessels = thresh > 0
 
 # Apply skeletonization to extract vessel centerlines
-skeletonized_vessels = skeletonize(binary_vessels)
+skeleton = skeletonize(binary_vessels)
+
+ordered_segments = extract_segments(skeleton)
+
+# Print number of extracted centerline segments
+print(f"Extracted {len(ordered_segments)} vessel centerline segments.")
+
+# Visualization
+plt.figure(figsize=(6, 6))
+plt.imshow(skeleton, cmap='gray')
+for segment in ordered_segments:
+    segment = np.array(segment)
+    #plt.plot(segment[:, 1], segment[:, 0], linewidth=1.2)  # Draw each segment
+    plt.scatter(segment[:, 1], segment[:, 0], s=1)  # Draw each segment
+plt.title("Extracted Ordered Vessel Centerlines")
+plt.axis("off")
+plt.show()
+
+
 # Compute Euclidean Distance Transform (EDT)
 distance_transform = distance_transform_edt(binary_vessels)
 
@@ -52,7 +72,7 @@ ax[1].imshow(binary_vessels, cmap="gray")
 ax[1].set_title("Binary Vessel Segmentation")
 ax[1].axis("off")
 
-ax[2].imshow(skeletonized_vessels, cmap="gray")
+ax[2].imshow(skeleton, cmap="gray")
 ax[2].set_title("True Vessel Centerlines (Skeletonized)")
 ax[2].axis("off")
 
@@ -66,15 +86,17 @@ ax[4].axis("off")
 
 plt.show()
 
+exit(1)
+
 # Get image dimensions
-height, width = skeletonized_vessels.shape
+height, width = skeleton.shape
 
 # Compute the sphere's center and radius
 cx, cy = width // 2, height // 2  # Center of the sphere
 radius = max(width, height) // 2  # Sphere radius
 
 # Extract skeleton points (centerline pixels)
-y_indices, x_indices = np.where(skeletonized_vessels)
+y_indices, x_indices = np.where(skeleton)
 radii_at_skeleton = distance_transform[y_indices, x_indices]
 
 # Convert (x, y) to sphere coordinates (mapping to z-positive hemisphere)
