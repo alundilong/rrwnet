@@ -8,7 +8,7 @@ from scipy.ndimage import distance_transform_edt
 import sys
 import os
 
-from post_utils import extract_segments
+from post_utils import extract_segments, smooth_and_resample_segment
 
 # Get the parent directory of the current script (assuming project-root is the common parent)
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -195,7 +195,11 @@ for idx, seg in enumerate(seg_sphere_points):
                 radius_array.append(voxel_radius)  # Store the corresponding radius
                 seg_3d_points.append(point3d)
 
-                f.write(f"v {point3d[0]} {point3d[1]} {point3d[2]}\n")
+        seg_3d_points = smooth_and_resample_segment(seg_3d_points,spacing=2,smoothing=0.5)
+
+        for point3d in seg_3d_points:
+            f.write(f"v {point3d[0]} {point3d[1]} {point3d[2]}\n")
+
         for i in range(len(seg_3d_points) - 1):
             f.write(f"l {i + 1} {i + 2}\n")  # OBJ indices start at 1
 
