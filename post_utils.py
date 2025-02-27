@@ -2,17 +2,51 @@
 from skimage.measure import label, regionprops
 from scipy.ndimage import convolve
 import numpy as np
+from scipy.spatial import cKDTree
+import matplotlib.pyplot as plt
 
-def order_segment(segment):
-    """Orders a segment by sorting based on Euclidean distance from the first point."""
-    if not segment:
-        return segment
+def find_neighbors(point, skeleton, visited):
+    """Finds 8-connected neighbors of a point that are in the skeleton and not visited."""
+    y, x = point
+    neighbors = []
     
-    segment = np.array(segment)
-    distances = np.linalg.norm(segment - segment[0], axis=1)
-    ordered_indices = np.argsort(distances)
+    # 8-connected neighbor offsets
+    offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
     
-    return segment[ordered_indices].tolist()
+    for dy, dx in offsets:
+        ny, nx = y + dy, x + dx
+        if 0 <= ny < skeleton.shape[0] and 0 <= nx < skeleton.shape[1]:
+            if skeleton[ny, nx] and (ny, nx) not in visited:  # Ensure it's unvisited
+                neighbors.append((ny, nx))
+    
+    return neighbors
+
+def traverse_segment(start, skeleton, visited, branch_points, endpoints):
+    """Finds an ordered segment starting from a given point until hitting another branch or endpoint."""
+    stack = [start]
+    segment = []
+
+    while stack:
+        point = stack.pop()
+        if point in visited:
+            continue
+        visited.add(point)
+        segment.append(point)
+
+        # Get unvisited neighbors
+        neighbors = find_neighbors(point, skeleton, visited)
+
+        # If the next neighbor is a branch point or endpoint, stop traversal
+        if point in branch_points and point != start:
+            break
+        if point in endpoints:
+            break
+
+        # Continue traversal by adding all unvisited neighbors to stack
+        for neighbor in neighbors:
+            stack.append(neighbor)
+
+    return segment
 
 def extract_segments(skeleton):
     """
@@ -32,33 +66,35 @@ def extract_segments(skeleton):
     neighbor_count = convolve(skeleton.astype(int), kernel, mode='constant', cval=0) - 10
 
     # Identify branch points (pixels with 3+ neighbors)
-    branch_points = (neighbor_count >= 3) & skeleton
+    branch_points = set(zip(*np.where((neighbor_count >= 3) & skeleton)))
 
-    # Label connected components
-    labeled_skeleton, num_features = label(skeleton, return_num=True, connectivity=2)
+    # Identify endpoints (pixels with exactly 1 neighbor)
+    endpoints = set(zip(*np.where((neighbor_count == 1) & skeleton)))
 
-    # Extract vessel segments as lists of (y, x) coordinate pairs
+    # Set of all skeleton points
+    skeleton_points = set(zip(*np.where(skeleton)))
+
+    # Visited pixels
+    visited = set()
+
+    # List of extracted vessel segments
     vessel_segments = []
-    for region in regionprops(labeled_skeleton):
-        coords = np.array(region.coords)  # Extract (row, col) points
 
-        # Split segments at branch points
-        split_segments = []
-        current_segment = []
+    # Traverse from branch points first, exploring all possible directions
+    for branch in branch_points:
+        for neighbor in find_neighbors(branch, skeleton, visited):
+            if neighbor not in visited:
+                segment = traverse_segment(neighbor, skeleton, visited, branch_points, endpoints)
+                if len(segment) > 2:  # Ensure segment has at least 2 points
+                    vessel_segments.append(segment)
 
-        for point in coords:
-            if branch_points[tuple(point)]:
-                if current_segment:
-                    split_segments.append(current_segment)
-                    current_segment = []
-            current_segment.append(tuple(point))  # Store (y, x) as tuple
-        
-        if current_segment:
-            split_segments.append(current_segment)
+    # Traverse remaining unvisited endpoints
+    for endpoint in endpoints:
+        if endpoint not in visited:
+            segment = traverse_segment(endpoint, skeleton, visited, branch_points, endpoints)
+            if len(segment) > 2:
+                vessel_segments.append(segment)
 
-        vessel_segments.extend(split_segments)
-
-    # Order all segments
-    ordered_segments = [order_segment(seg) for seg in vessel_segments]
-
-    return ordered_segments  # List of ordered lists of (y, x) pairs
+    print(f"Total vessel segments extracted: {len(vessel_segments)}")
+    
+    return vessel_segments  # List of ordered (y, x) coordinate lists

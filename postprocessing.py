@@ -52,14 +52,14 @@ plt.figure(figsize=(6, 6))
 plt.imshow(skeleton, cmap='gray')
 for segment in ordered_segments:
     segment = np.array(segment)
-    plt.plot(segment[:, 1], segment[:, 0], linewidth=1.2)  # Draw each segment
+    plt.plot(segment[:, 1], segment[:, 0], linewidth=0.5)  # Draw each segment
     # plt.scatter(segment[:, 1], segment[:, 0], s=1)  # Draw each segment
 
 plt.title("Extracted Ordered Vessel Centerlines")
 plt.axis("off")
 plt.show()
 
-exit(1)
+# exit(1)
 
 # Compute Euclidean Distance Transform (EDT)
 distance_transform = distance_transform_edt(binary_vessels)
