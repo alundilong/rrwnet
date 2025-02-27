@@ -4,3 +4,5 @@ shared_data
 predictions
 data/enhanced/
 *.vti
+
+tmp/

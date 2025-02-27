@@ -52,12 +52,14 @@ plt.figure(figsize=(6, 6))
 plt.imshow(skeleton, cmap='gray')
 for segment in ordered_segments:
     segment = np.array(segment)
-    #plt.plot(segment[:, 1], segment[:, 0], linewidth=1.2)  # Draw each segment
-    plt.scatter(segment[:, 1], segment[:, 0], s=1)  # Draw each segment
+    plt.plot(segment[:, 1], segment[:, 0], linewidth=1.2)  # Draw each segment
+    # plt.scatter(segment[:, 1], segment[:, 0], s=1)  # Draw each segment
+
 plt.title("Extracted Ordered Vessel Centerlines")
 plt.axis("off")
 plt.show()
 
+exit(1)
 
 # Compute Euclidean Distance Transform (EDT)
 distance_transform = distance_transform_edt(binary_vessels)
@@ -86,8 +88,6 @@ ax[4].axis("off")
 
 plt.show()
 
-exit(1)
-
 # Get image dimensions
 height, width = skeleton.shape
 
@@ -95,24 +95,33 @@ height, width = skeleton.shape
 cx, cy = width // 2, height // 2  # Center of the sphere
 radius = max(width, height) // 2  # Sphere radius
 
-# Extract skeleton points (centerline pixels)
-y_indices, x_indices = np.where(skeleton)
-radii_at_skeleton = distance_transform[y_indices, x_indices]
-
-# Convert (x, y) to sphere coordinates (mapping to z-positive hemisphere)
 sphere_points = []
 sphere_points_radius = []
+seg_sphere_points = []
+seg_sphere_points_radius = []
 
-for i, (x, y) in enumerate(zip(x_indices, y_indices)):
-    # Normalize coordinates to the range [-1, 1] relative to the center
-    nx = (x - cx) / radius
-    ny = (y - cy) / radius
+for seg in ordered_segments:
+    seg_points = []
+    seg_radius = []
 
-    # Compute the z-coordinate on the hemisphere using inverse spherical projection
-    if nx**2 + ny**2 <= 1:  # Ensure points are within the unit circle
-        nz = np.sqrt(1 - (nx**2 + ny**2))  # z is positive for upper hemisphere
-        sphere_points.append([nx * radius, ny * radius, nz * radius])
-        sphere_points_radius.append(radii_at_skeleton[i])
+    for y, x in seg:
+
+        # Normalize coordinates to the range [-1, 1] relative to the center
+        nx = (x - cx) / radius
+        ny = (y - cy) / radius
+
+        # Compute the z-coordinate on the hemisphere using inverse spherical projection
+        if nx**2 + ny**2 <= 1:  # Ensure points are within the unit circle
+            nz = np.sqrt(1 - (nx**2 + ny**2))  # z is positive for upper hemisphere
+            point = [nx * radius, ny * radius, nz * radius]
+            sphere_points.append(point)
+            seg_points.append(point)
+            sphere_points_radius.append(distance_transform[y,x])
+            seg_radius.append(distance_transform[y,x])
+
+    seg_sphere_points.append(seg_points)
+    seg_sphere_points_radius.append(seg_radius)
+
 
 # Convert to numpy array for easier processing
 sphere_points = np.array(sphere_points)
@@ -143,7 +152,7 @@ min_bound = np.min(sphere_points, axis=0) - extend
 max_bound = np.max(sphere_points, axis=0) + extend
 
 # Define voxel grid resolution
-voxel_size = radius / 300
+voxel_size = radius / 200
 
 # Compute grid dimensions based on the bounding box
 grid_x = np.arange(min_bound[0], max_bound[0], voxel_size)
@@ -161,19 +170,36 @@ radius_array = []
 # Define a default radius for each point
 max_radius = sphere_points_radius.max()
 
+# Define the output directory in /tmp/
+output_dir = "tmp/"
+os.makedirs(output_dir, exist_ok=True)
+
 # Assign each 3D point to the closest voxel and store its radius
-for point_idx, (px, py, pz) in enumerate(sphere_points):
-    voxel_radius = -sphere_points_radius[point_idx]  # Assign a default radius (can be customized per point)
+for idx, seg in enumerate(seg_sphere_points):
 
-    # Convert world coordinates to voxel indices
-    idx_x = np.searchsorted(grid_x, px)
-    idx_y = np.searchsorted(grid_y, py)
-    idx_z = np.searchsorted(grid_z, pz)
+    obj_filename = os.path.join(output_dir, f"segment_{idx}.obj")
+    seg_3d_points = []
+    with open(obj_filename, "w") as f:
+        for point_idx, (px, py, pz) in enumerate(seg):
+            voxel_radius = -seg_sphere_points_radius[idx][point_idx]  # Assign a default radius (can be customized per point)
 
-    # Ensure indices are within bounds
-    if 0 <= idx_x < dimensions[0] and 0 <= idx_y < dimensions[1] and 0 <= idx_z < dimensions[2]:
-        voxel_id_array.append((idx_x,idx_y,idx_z))
-        radius_array.append(voxel_radius)  # Store the corresponding radius
+            # Convert world coordinates to voxel indices
+            idx_x = np.searchsorted(grid_x, px)
+            idx_y = np.searchsorted(grid_y, py)
+            idx_z = np.searchsorted(grid_z, pz)
+
+            # Ensure indices are within bounds
+            if 0 <= idx_x < dimensions[0] and 0 <= idx_y < dimensions[1] and 0 <= idx_z < dimensions[2]:
+                point3d = (idx_x,idx_y,idx_z)
+                voxel_id_array.append(point3d)
+                radius_array.append(voxel_radius)  # Store the corresponding radius
+                seg_3d_points.append(point3d)
+
+                f.write(f"v {point3d[0]} {point3d[1]} {point3d[2]}\n")
+        for i in range(len(seg_3d_points) - 1):
+            f.write(f"l {i + 1} {i + 2}\n")  # OBJ indices start at 1
+
+    print(f"Saved segment {idx} to {obj_filename}")
 
 radius_array = np.array(radius_array)
 
