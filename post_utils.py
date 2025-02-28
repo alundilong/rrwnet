@@ -358,9 +358,65 @@ def create_implicit_distance_function(surface):
     implicit_distance.SetInput(surface)
     return implicit_distance
 
+def create_cylinder_at_position(center, radius, height, direction):
+    """
+    Creates a cylinder mesh at a given position with a specified direction.
+
+    Args:
+        center (tuple): The (x, y, z) coordinates of the cylinder center.
+        radius (float): Radius of the cylinder.
+        height (float): Height (thickness) of the cylinder.
+        direction (tuple): The (x, y, z) direction vector of the cylinder axis.
+
+    Returns:
+        pv.PolyData: Cylinder mesh.
+    """
+    direction = np.array(direction)
+    direction = direction / np.linalg.norm(direction)  # Normalize direction
+    cylinder = pv.Cylinder(center=center, direction=direction, radius=radius, height=height)
+    return cylinder
+
+def compute_cylinder_position_and_direction(segment):
+    """
+    Computes the cylinder placement at 1/3 length from the end point
+    and calculates the normal direction using points within the last 1/3 length.
+
+    Args:
+        segment (list of tuples): The centerline segment.
+
+    Returns:
+        tuple: Cylinder center position, max radius for scaling, and normal direction.
+    """
+    if len(segment) < 3:
+        return None, None, None  # Not enough points
+
+    # Convert segment to numpy array
+    segment = np.array(segment)
+
+    # Compute total segment length
+    distances = np.linalg.norm(np.diff(segment, axis=0), axis=1)
+    total_length = np.sum(distances)
+
+    # Find position at 1/3 length from the end
+    target_length = total_length / 3
+    accumulated_length = 0
+    direction_vector = None
+
+    for i in range(len(segment) - 1, 0, -1):  # Start from the end
+        accumulated_length += np.linalg.norm(segment[i] - segment[i - 1])
+        if accumulated_length >= target_length:
+            # Compute normal direction based on last 1/3 segment
+            last_segment_part = segment[i:]  # Select last 1/3 segment
+            if len(last_segment_part) > 1:
+                direction_vector = last_segment_part[-1] - last_segment_part[0]
+                direction_vector = direction_vector / np.linalg.norm(direction_vector)  # Normalize
+            return segment[i], np.max(distances), direction_vector
+
+    return segment[0], np.max(distances), None  # Default to first point
+
 def display_3d_surface(surface, centerlines):
     """
-    Displays the extracted surface along with centerlines.
+    Displays the extracted surface along with centerlines and cylinders.
 
     Args:
         surface (vtkPolyData): Extracted isosurface.
@@ -375,4 +431,13 @@ def display_3d_surface(surface, centerlines):
             line = pv.lines_from_points(np.array(segment))
             plotter.add_mesh(line, color="red", line_width=3)
 
+            # Compute cylinder placement and direction
+            cylinder_center, max_radius, normal_direction = compute_cylinder_position_and_direction(segment)
+            if cylinder_center is not None and normal_direction is not None:
+                cylinder_radius = 2.0 * max_radius  # 1.5x max radius
+                cylinder_height = 0.1 * max_radius  # 0.1x max radius
+                cylinder = create_cylinder_at_position(cylinder_center, cylinder_radius, cylinder_height, normal_direction)
+                plotter.add_mesh(cylinder, color="blue")
+
     plotter.show()
+
