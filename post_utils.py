@@ -3,7 +3,7 @@ from scipy.ndimage import convolve
 import numpy as np
 
 import matplotlib.pyplot as plt
-from scipy.interpolate import splprep, splev
+from scipy.interpolate import splprep, splev, interp1d
 
 def remove_duplicate_points(segment, max_distance = 2):
     """
@@ -25,24 +25,29 @@ def remove_duplicate_points(segment, max_distance = 2):
 
     return unique_segment
 
-def smooth_and_resample_segment(segment, spacing=2, smoothing=0.9):
+def smooth_and_resample_segment(segment, radii, spacing=2, smoothing=0.9):
     """
     Smooths and resamples a 3D vessel segment using a spline curve, ensuring uniform spacing.
+    Uses **linear interpolation** for radius values to avoid artifacts with non-monotonic data.
 
     Args:
         segment (list of tuples): A single 3D centerline segment [(x, y, z)].
+        radii (list of floats): Corresponding radius values for each point in the segment.
         spacing (float): Desired spacing between resampled points.
         smoothing (float): Smoothing factor for spline fitting (0 = strict, higher = smoother).
 
     Returns:
-        list of tuples: Smoothed and uniformly spaced 3D centerline segment.
+        tuple: (new_segment, new_radii)
+            - new_segment (list of tuples): Smoothed and uniformly spaced 3D centerline segment.
+            - new_radii (list of floats): Interpolated radius values for the new points.
     """
     segment = remove_duplicate_points(segment)  # Ensure uniqueness
 
     if len(segment) < 3:
-        return segment  # Ignore short segments
+        return segment, radii  # Ignore short segments
 
     segment = np.array(segment)
+    radii = np.array(radii)
 
     # Compute total length of the segment
     distances = np.linalg.norm(np.diff(segment, axis=0), axis=1)
@@ -51,14 +56,26 @@ def smooth_and_resample_segment(segment, spacing=2, smoothing=0.9):
     # Estimate the number of points based on the total length and desired spacing
     num_points = max(int(total_length / spacing), len(segment))  # Ensure at least as many points as original
 
-    # Fit a spline curve to the segment
+    # Fit a spline curve to the segment (3D coordinates)
     tck, u = splprep(segment.T, s=smoothing, k=min(3, len(segment) - 1))  # Ensure valid spline order
 
-    # Resample the curve with uniform spacing
+    # Generate new uniform u values
     new_u = np.linspace(0, 1, num_points)  # Uniform parameterization
-    new_points = np.array(splev(new_u, tck)).T  # Evaluate spline
 
-    return [tuple(p) for p in new_points]
+    # Resample the curve with uniform spacing
+    new_points = np.array(splev(new_u, tck)).T  # Evaluate spline for 3D points
+
+    # Ensure `u` and `radii` have matching lengths by recomputing `u` for radii
+    u_radii = np.linspace(0, 1, len(radii))
+
+    # Use linear interpolation for non-monotonic radii
+    radius_interpolator = interp1d(u_radii, radii, kind='linear', fill_value="extrapolate")
+    new_radii = radius_interpolator(new_u)
+    # print(f'old {np.array(radii).min()} {np.array(radii).max()}')
+    # print(f'new {np.array(new_radii).min()} {np.array(new_radii).max()}')
+    # exit(1)
+
+    return [tuple(p) for p in new_points], new_radii.tolist()
 
 def find_neighbors(point, skeleton, visited):
     """Finds 8-connected neighbors of a point that are in the skeleton and not visited."""

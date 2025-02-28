@@ -114,11 +114,13 @@ for seg in ordered_segments:
         # Compute the z-coordinate on the hemisphere using inverse spherical projection
         if nx**2 + ny**2 <= 1:  # Ensure points are within the unit circle
             nz = np.sqrt(1 - (nx**2 + ny**2))  # z is positive for upper hemisphere
-            point = [nx * radius, ny * radius, nz * radius]
+            point = (nx * radius, ny * radius, nz * radius)
             sphere_points.append(point)
             seg_points.append(point)
             sphere_points_radius.append(distance_transform[y,x])
             seg_radius.append(distance_transform[y,x])
+
+    seg_points, seg_radius = smooth_and_resample_segment(seg_points, seg_radius, spacing=2, smoothing=0.5)
 
     seg_sphere_points.append(seg_points)
     seg_sphere_points_radius.append(seg_radius)
@@ -196,8 +198,6 @@ for idx, seg in enumerate(seg_sphere_points):
                 radius_array.append(voxel_radius)  # Store the corresponding radius
                 seg_3d_points.append(point3d)
 
-        seg_3d_points = smooth_and_resample_segment(seg_3d_points,spacing=2,smoothing=0.5)
-
         for point3d in seg_3d_points:
             f.write(f"v {point3d[0]} {point3d[1]} {point3d[2]}\n")
 
@@ -220,13 +220,14 @@ fm_filter.set_input_image_carries_initial_value(True)
 fm_filter.set_thresholds(-np.finfo(np.float32).max, 1)
 fm_filter.set_seed_threshold(-max_radius, -0.1)
 fm_filter.stop_after_reach_value = radius_max
-# fm_filter.run(image_to_fm)
+fm_filter.run(image_to_fm)
 
 ## set unvisited voxels to a distinguish value
-# fm_filter.output_image[fm_filter.unvisited_voxels == True] = radius_max
-# dump_image_to_vtk(fm_filter.output_image, "Dilator_distancemap.vti")
+fm_filter.output_image[fm_filter.unvisited_voxels == True] = radius_max
+dump_image_to_vtk(fm_filter.output_image, "Dilator_distancemap.vti")
 
 # Load the image from VTI file or the provided image data
+# vtk_image = load_vti_or_image("Dilator_distancemap.vti", image_data=fm_filter.output_image)
 vtk_image = load_vti_or_image("Dilator_distancemap.vti")
 
 # Extract the isosurface with value 0
