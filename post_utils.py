@@ -114,23 +114,25 @@ def traverse_segment(start, skeleton, visited, branch_points, endpoints):
 
     return segment
 
-def is_terminal(segment, neighbor_count):
+def is_terminal(segment, neighbor_count, endpoints):
     """
-    Checks if a segment is terminal (one end has exactly 1 neighbor, the other has more than 1).
+    Checks if a segment is terminal (one end is an endpoint).
     
     Args:
         segment (list of tuples): The extracted vessel segment (ordered list of (y, x) points).
         neighbor_count (ndarray): Precomputed neighbor count matrix.
+        endpoints (set): Set of terminal endpoints.
 
     Returns:
-        bool: True if the segment is terminal, False otherwise.
+        bool, tuple: (True if terminal, terminal endpoint)
     """
     start, end = segment[0], segment[-1]
-    
-    start_neighbors = neighbor_count[start]  # Neighbors at start point
-    end_neighbors = neighbor_count[end]  # Neighbors at end point
-    
-    return (start_neighbors == 1 and end_neighbors > 1) or (end_neighbors == 1 and start_neighbors > 1)
+
+    if start in endpoints and neighbor_count[start] == 1:
+        return True, start
+    elif end in endpoints and neighbor_count[end] == 1:
+        return True, end
+    return False, None
 
 def extract_segments(skeleton, distance_transform):
     """
@@ -175,14 +177,21 @@ def extract_segments(skeleton, distance_transform):
                 segment = traverse_segment(neighbor, skeleton, visited, branch_points, endpoints)
                 
                 if len(segment) > 2:
+                    # Check if the segment is terminal
+                    is_term, terminal_endpoint = is_terminal(segment, neighbor_count, endpoints)
+
+                    # Ensure the last point in terminal segments is the true terminal endpoint
+                    if is_term and segment[-1] != terminal_endpoint:
+                        segment.reverse()  # Reverse the order if needed
+
                     vessel_segments.append(segment)
 
-                    # Extract radius values
+                    # Extract ordered radius values
                     radii = [distance_transform[y, x] for y, x in segment]
                     radius_list.append(radii)
 
-                    # Determine if this is a terminal branch
-                    labels.append(is_terminal(segment, neighbor_count))
+                    # Store terminal label
+                    labels.append(is_term)
 
     # Process remaining endpoints
     for endpoint in endpoints:
@@ -190,14 +199,21 @@ def extract_segments(skeleton, distance_transform):
             segment = traverse_segment(endpoint, skeleton, visited, branch_points, endpoints)
             
             if len(segment) > 2:
+                # Check if the segment is terminal
+                is_term, terminal_endpoint = is_terminal(segment, neighbor_count, endpoints)
+
+                # Ensure the last point is the true terminal endpoint
+                if is_term and segment[-1] != terminal_endpoint:
+                    segment.reverse()
+
                 vessel_segments.append(segment)
 
-                # Extract radius values
+                # Extract ordered radius values
                 radii = [distance_transform[y, x] for y, x in segment]
                 radius_list.append(radii)
 
-                # Determine if this is a terminal branch
-                labels.append(is_terminal(segment, neighbor_count))
+                # Store terminal label
+                labels.append(is_term)
 
     print(f"Total vessel segments extracted: {len(vessel_segments)}")
 
