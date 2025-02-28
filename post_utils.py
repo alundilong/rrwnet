@@ -23,19 +23,6 @@ def remove_duplicate_points(segment, max_distance = 2):
             seen.add(point)
             unique_segment.append(point)
 
-    # segment = unique_segment
-    # cleaned_segment = [segment[0]]  # Start with the first point
-
-    # for i in range(1, len(segment)):
-    #     prev_point = cleaned_segment[-1]
-    #     curr_point = segment[i]
-
-    #     # Compute Euclidean distance
-    #     dist = np.linalg.norm(np.array(curr_point) - np.array(prev_point))
-
-    #     if dist > 1e-6 and dist <= max_distance:  # Remove duplicates & distant points
-    #         cleaned_segment.append(curr_point)
-
     return unique_segment
 
 def smooth_and_resample_segment(segment, spacing=2, smoothing=0.9):
@@ -91,8 +78,19 @@ def find_neighbors(point, skeleton, visited):
 
 def traverse_segment(start, skeleton, visited, branch_points, endpoints):
     """Finds an ordered segment starting from a given point until hitting another branch or endpoint."""
-    stack = [start]
+
+    stack = []
     segment = []
+
+    # Get all unvisited neighbors of the start point
+    neighbors = find_neighbors(start, skeleton, visited)
+
+    # If there are multiple neighbors, choose only **one** to begin traversal
+    if neighbors:
+        stack.append(neighbors[0])  # Always follow only one path first
+
+    visited.add(start)
+    segment.append(start)
 
     while stack:
         point = stack.pop()
@@ -104,15 +102,15 @@ def traverse_segment(start, skeleton, visited, branch_points, endpoints):
         # Get unvisited neighbors
         neighbors = find_neighbors(point, skeleton, visited)
 
-        # If the next neighbor is a branch point or endpoint, stop traversal
+        # Stop if reaching a branch point (excluding the start point)
         if point in branch_points and point != start:
             break
         if point in endpoints:
             break
 
-        # Continue traversal by adding all unvisited neighbors to stack
-        for neighbor in neighbors:
-            stack.append(neighbor)
+        # Append only **one** next neighbor to continue in a single direction
+        for nid in neighbors:
+            stack.append(nid)
 
     return segment
 
