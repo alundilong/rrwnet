@@ -178,6 +178,7 @@ output_dir = "tmp/"
 os.makedirs(output_dir, exist_ok=True)
 
 # Assign each 3D point to the closest voxel and store its radius
+seg_3d_points_all = []
 for idx, seg in enumerate(seg_sphere_points):
 
     obj_filename = os.path.join(output_dir, f"segment_{idx}.obj")
@@ -197,6 +198,8 @@ for idx, seg in enumerate(seg_sphere_points):
                 voxel_id_array.append(point3d)
                 radius_array.append(voxel_radius)  # Store the corresponding radius
                 seg_3d_points.append(point3d)
+
+        seg_3d_points_all.append(seg_3d_points)
 
         for point3d in seg_3d_points:
             f.write(f"v {point3d[0]} {point3d[1]} {point3d[2]}\n")
@@ -220,11 +223,11 @@ fm_filter.set_input_image_carries_initial_value(True)
 fm_filter.set_thresholds(-np.finfo(np.float32).max, 1)
 fm_filter.set_seed_threshold(-max_radius, -0.1)
 fm_filter.stop_after_reach_value = radius_max
-fm_filter.run(image_to_fm)
+# fm_filter.run(image_to_fm)
 
-## set unvisited voxels to a distinguish value
-fm_filter.output_image[fm_filter.unvisited_voxels == True] = radius_max
-dump_image_to_vtk(fm_filter.output_image, "Dilator_distancemap.vti")
+# ## set unvisited voxels to a distinguish value
+# fm_filter.output_image[fm_filter.unvisited_voxels == True] = radius_max
+# dump_image_to_vtk(fm_filter.output_image, "Dilator_distancemap.vti")
 
 # Load the image from VTI file or the provided image data
 # vtk_image = load_vti_or_image("Dilator_distancemap.vti", image_data=fm_filter.output_image)
@@ -236,5 +239,9 @@ isosurface = extract_isosurface(vtk_image, iso_value=0)
 # Extract only the largest connected region
 largest_region = get_largest_connected_region(isosurface)
 
+terminal_centerlines = [seg_3d_points_all[i] for i, is_terminal in enumerate(terminal) if is_terminal]
+
 # Display the extracted surface
-display_3d_surface(largest_region)
+display_3d_surface(largest_region, terminal_centerlines)
+
+# for those c

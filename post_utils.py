@@ -280,9 +280,21 @@ def get_largest_connected_region(surface):
     connectivity_filter.Update()
     return connectivity_filter.GetOutput()
 
-def display_3d_surface(surface):
-    """Display extracted isosurface in a 3D window."""
-    pv_mesh = pv.wrap(surface)
+def display_3d_surface(surface, terminal_segments):
+    """
+    Displays the extracted surface along with terminal centerlines.
+    
+    Args:
+        surface (vtkPolyData): Extracted isosurface.
+        terminal_segments (list of lists): Terminal centerlines (list of 3D point lists).
+    """
     plotter = pv.Plotter()
-    plotter.add_mesh(pv_mesh, color="white", show_edges=True)
+    plotter.add_mesh(pv.wrap(surface), color="white", opacity=0.5, show_edges=True)
+
+    # Add terminal centerlines
+    for segment in terminal_segments:
+        if len(segment) > 1:
+            line = pv.lines_from_points(np.array(segment))
+            plotter.add_mesh(line, color="red", line_width=3)
+
     plotter.show()
