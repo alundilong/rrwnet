@@ -9,6 +9,7 @@ import sys
 import os
 
 from post_utils import extract_segments, smooth_and_resample_segment
+from post_utils import display_3d_surface,extract_isosurface,load_vti_or_image, get_largest_connected_region
 
 # Get the parent directory of the current script (assuming project-root is the common parent)
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -219,8 +220,20 @@ fm_filter.set_input_image_carries_initial_value(True)
 fm_filter.set_thresholds(-np.finfo(np.float32).max, 1)
 fm_filter.set_seed_threshold(-max_radius, -0.1)
 fm_filter.stop_after_reach_value = radius_max
-fm_filter.run(image_to_fm)
+# fm_filter.run(image_to_fm)
 
-# set unvisited voxels to a distinguish value
-fm_filter.output_image[fm_filter.unvisited_voxels == True] = radius_max
-dump_image_to_vtk(fm_filter.output_image, "Dilator_distancemap.vti")
+## set unvisited voxels to a distinguish value
+# fm_filter.output_image[fm_filter.unvisited_voxels == True] = radius_max
+# dump_image_to_vtk(fm_filter.output_image, "Dilator_distancemap.vti")
+
+# Load the image from VTI file or the provided image data
+vtk_image = load_vti_or_image("Dilator_distancemap.vti")
+
+# Extract the isosurface with value 0
+isosurface = extract_isosurface(vtk_image, iso_value=0)
+
+# Extract only the largest connected region
+largest_region = get_largest_connected_region(isosurface)
+
+# Display the extracted surface
+display_3d_surface(largest_region)

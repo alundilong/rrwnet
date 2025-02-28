@@ -218,3 +218,54 @@ def extract_segments(skeleton, distance_transform):
     print(f"Total vessel segments extracted: {len(vessel_segments)}")
 
     return vessel_segments, radius_list, labels
+
+import vtk
+import numpy as np
+import pyvista as pv
+from vtk.util import numpy_support
+from vtkmodules.vtkCommonDataModel import vtkImageData
+from vtkmodules.vtkFiltersCore import vtkContourFilter
+
+def load_vti_or_image(filename, image_data=None):
+    """Load 3D image from VTI file if it exists, otherwise use the given image data."""
+    reader = vtk.vtkXMLImageDataReader()
+    reader.SetFileName(filename)
+    if reader.CanReadFile(filename):
+        reader.Update()
+        return reader.GetOutput()
+    else:
+        return convert_numpy_to_vtk(image_data)
+
+def convert_numpy_to_vtk(numpy_image):
+    """Convert a NumPy 3D image to a VTK image."""
+    vtk_image = vtkImageData()
+    dims = numpy_image.shape
+    vtk_image.SetDimensions(dims[2], dims[1], dims[0])
+    vtk_image.AllocateScalars(vtk.VTK_FLOAT, 1)
+    flat_data = numpy_image.flatten(order='C')
+    vtk_array = numpy_support.numpy_to_vtk(flat_data, deep=True, array_type=vtk.VTK_FLOAT)
+    vtk_image.GetPointData().SetScalars(vtk_array)
+    return vtk_image
+
+def extract_isosurface(vtk_image, iso_value=0):
+    """Extract isosurface from a 3D VTK image."""
+    contour = vtkContourFilter()
+    contour.SetInputData(vtk_image)
+    contour.SetValue(0, iso_value)
+    contour.Update()
+    return contour.GetOutput()
+
+def get_largest_connected_region(surface):
+    """Extracts the largest connected component from a VTK surface."""
+    connectivity_filter = vtk.vtkConnectivityFilter()
+    connectivity_filter.SetInputData(surface)
+    connectivity_filter.SetExtractionModeToLargestRegion()
+    connectivity_filter.Update()
+    return connectivity_filter.GetOutput()
+
+def display_3d_surface(surface):
+    """Display extracted isosurface in a 3D window."""
+    pv_mesh = pv.wrap(surface)
+    plotter = pv.Plotter()
+    plotter.add_mesh(pv_mesh, color="white", show_edges=True)
+    plotter.show()
