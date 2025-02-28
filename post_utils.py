@@ -114,21 +114,44 @@ def traverse_segment(start, skeleton, visited, branch_points, endpoints):
 
     return segment
 
-def extract_segments(skeleton, distance_transform):
+def is_terminal(segment, neighbor_count):
     """
-    Extracts vessel centerlines as ordered segments from a skeletonized image.
+    Checks if a segment is terminal (one end has exactly 1 neighbor, the other has more than 1).
     
     Args:
-        skeleton (ndarray): Binary skeletonized image.
+        segment (list of tuples): The extracted vessel segment (ordered list of (y, x) points).
+        neighbor_count (ndarray): Precomputed neighbor count matrix.
 
     Returns:
-        list of list of tuples: Each segment is a list of (y, x) coordinate pairs.
+        bool: True if the segment is terminal, False otherwise.
+    """
+    start, end = segment[0], segment[-1]
+    
+    start_neighbors = neighbor_count[start]  # Neighbors at start point
+    end_neighbors = neighbor_count[end]  # Neighbors at end point
+    
+    return (start_neighbors == 1 and end_neighbors > 1) or (end_neighbors == 1 and start_neighbors > 1)
+
+def extract_segments(skeleton, distance_transform):
+    """
+    Extracts vessel centerlines as ordered segments from a skeletonized image,
+    while also extracting radius information and terminal branch labels.
+
+    Args:
+        skeleton (ndarray): Binary skeletonized image.
+        distance_transform (ndarray): Euclidean distance transform of the binary vessel image.
+
+    Returns:
+        tuple: (vessel_segments, radius_list, labels)
+            - vessel_segments: List of ordered lists of (y, x) coordinate pairs.
+            - radius_list: List of ordered lists of radius values (from distance_transform).
+            - labels: List of booleans indicating if a segment is a terminal branch.
     """
 
     # Define 8-neighborhood kernel to find junctions
     kernel = np.array([[1, 1, 1], [1, 10, 1], [1, 1, 1]])
 
-    # Count neighbors of each skeleton pixel
+    # Compute neighbor count for each skeleton pixel
     neighbor_count = convolve(skeleton.astype(int), kernel, mode='constant', cval=0) - 10
 
     # Identify branch points (pixels with 3+ neighbors)
@@ -140,40 +163,42 @@ def extract_segments(skeleton, distance_transform):
     # Visited pixels
     visited = set()
 
-    # List of extracted vessel segments
+    # Lists to store extracted data
     vessel_segments = []
-    radius_list = []       # List of radius values per segment
-    labels = []            # True if the segment originates from an endpoint
+    radius_list = []
+    labels = []  # True if the segment is a terminal branch
 
-    # Traverse from branch points first, exploring all possible directions
+    # Process branch points first
     for branch in branch_points:
         for neighbor in find_neighbors(branch, skeleton, visited):
             if neighbor not in visited:
                 segment = traverse_segment(neighbor, skeleton, visited, branch_points, endpoints)
-                if len(segment) > 2:  # Ensure segment has at least 2 points
+                
+                if len(segment) > 2:
                     vessel_segments.append(segment)
-                    
-                    # Extract corresponding radius values
+
+                    # Extract radius values
                     radii = [distance_transform[y, x] for y, x in segment]
                     radius_list.append(radii)
 
-                    # Label as False (not starting from an endpoint)
-                    labels.append(False)
+                    # Determine if this is a terminal branch
+                    labels.append(is_terminal(segment, neighbor_count))
 
-    # Traverse remaining unvisited endpoints
+    # Process remaining endpoints
     for endpoint in endpoints:
         if endpoint not in visited:
             segment = traverse_segment(endpoint, skeleton, visited, branch_points, endpoints)
+            
             if len(segment) > 2:
                 vessel_segments.append(segment)
 
-                # Extract corresponding radius values
+                # Extract radius values
                 radii = [distance_transform[y, x] for y, x in segment]
                 radius_list.append(radii)
 
-                # Label as True (originated from an endpoint)
-                labels.append(True)
-    
+                # Determine if this is a terminal branch
+                labels.append(is_terminal(segment, neighbor_count))
+
     print(f"Total vessel segments extracted: {len(vessel_segments)}")
-    
-    return vessel_segments , radius_list, labels  # Return all extracted data
+
+    return vessel_segments, radius_list, labels
