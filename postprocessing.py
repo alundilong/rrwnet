@@ -42,7 +42,10 @@ binary_vessels = thresh > 0
 # Apply skeletonization to extract vessel centerlines
 skeleton = skeletonize(binary_vessels)
 
-ordered_segments = extract_segments(skeleton)
+# Compute Euclidean Distance Transform (EDT)
+distance_transform = distance_transform_edt(binary_vessels)
+
+ordered_segments, radii, terminal = extract_segments(skeleton,distance_transform)
 
 # Print number of extracted centerline segments
 print(f"Extracted {len(ordered_segments)} vessel centerline segments.")
@@ -50,19 +53,17 @@ print(f"Extracted {len(ordered_segments)} vessel centerline segments.")
 # Visualization
 plt.figure(figsize=(6, 6))
 plt.imshow(skeleton, cmap='gray')
-for segment in ordered_segments:
-    segment = np.array(segment)
-    plt.plot(segment[:, 1], segment[:, 0], linewidth=0.5)  # Draw each segment
-    # plt.scatter(segment[:, 1], segment[:, 0], s=1)  # Draw each segment
-
+for idx, segment in enumerate(ordered_segments):
+    if idx == 22:
+        segment = np.array(segment)
+        plt.plot(segment[:, 1], segment[:, 0], linewidth=0.5)  # Draw each segment
+        # plt.scatter(segment[:, 1], segment[:, 0], s=1)  # Draw each segment
 plt.title("Extracted Ordered Vessel Centerlines")
 plt.axis("off")
 plt.show()
 
-# exit(1)
+exit(1)
 
-# Compute Euclidean Distance Transform (EDT)
-distance_transform = distance_transform_edt(binary_vessels)
 
 # Display results
 fig, ax = plt.subplots(1, 5, figsize=(12, 6))

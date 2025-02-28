@@ -23,20 +23,20 @@ def remove_duplicate_points(segment, max_distance = 2):
             seen.add(point)
             unique_segment.append(point)
 
-    segment = unique_segment
-    cleaned_segment = [segment[0]]  # Start with the first point
+    # segment = unique_segment
+    # cleaned_segment = [segment[0]]  # Start with the first point
 
-    for i in range(1, len(segment)):
-        prev_point = cleaned_segment[-1]
-        curr_point = segment[i]
+    # for i in range(1, len(segment)):
+    #     prev_point = cleaned_segment[-1]
+    #     curr_point = segment[i]
 
-        # Compute Euclidean distance
-        dist = np.linalg.norm(np.array(curr_point) - np.array(prev_point))
+    #     # Compute Euclidean distance
+    #     dist = np.linalg.norm(np.array(curr_point) - np.array(prev_point))
 
-        if dist > 1e-6 and dist <= max_distance:  # Remove duplicates & distant points
-            cleaned_segment.append(curr_point)
+    #     if dist > 1e-6 and dist <= max_distance:  # Remove duplicates & distant points
+    #         cleaned_segment.append(curr_point)
 
-    return cleaned_segment
+    return unique_segment
 
 def smooth_and_resample_segment(segment, spacing=2, smoothing=0.9):
     """
@@ -116,7 +116,7 @@ def traverse_segment(start, skeleton, visited, branch_points, endpoints):
 
     return segment
 
-def extract_segments(skeleton):
+def extract_segments(skeleton, distance_transform):
     """
     Extracts vessel centerlines as ordered segments from a skeletonized image.
     
@@ -139,14 +139,13 @@ def extract_segments(skeleton):
     # Identify endpoints (pixels with exactly 1 neighbor)
     endpoints = set(zip(*np.where((neighbor_count == 1) & skeleton)))
 
-    # Set of all skeleton points
-    skeleton_points = set(zip(*np.where(skeleton)))
-
     # Visited pixels
     visited = set()
 
     # List of extracted vessel segments
     vessel_segments = []
+    radius_list = []       # List of radius values per segment
+    labels = []            # True if the segment originates from an endpoint
 
     # Traverse from branch points first, exploring all possible directions
     for branch in branch_points:
@@ -155,6 +154,13 @@ def extract_segments(skeleton):
                 segment = traverse_segment(neighbor, skeleton, visited, branch_points, endpoints)
                 if len(segment) > 2:  # Ensure segment has at least 2 points
                     vessel_segments.append(segment)
+                    
+                    # Extract corresponding radius values
+                    radii = [distance_transform[y, x] for y, x in segment]
+                    radius_list.append(radii)
+
+                    # Label as False (not starting from an endpoint)
+                    labels.append(False)
 
     # Traverse remaining unvisited endpoints
     for endpoint in endpoints:
@@ -163,7 +169,13 @@ def extract_segments(skeleton):
             if len(segment) > 2:
                 vessel_segments.append(segment)
 
+                # Extract corresponding radius values
+                radii = [distance_transform[y, x] for y, x in segment]
+                radius_list.append(radii)
+
+                # Label as True (originated from an endpoint)
+                labels.append(True)
     
     print(f"Total vessel segments extracted: {len(vessel_segments)}")
     
-    return vessel_segments  # List of ordered (y, x) coordinate lists
+    return vessel_segments , radius_list, labels  # Return all extracted data
