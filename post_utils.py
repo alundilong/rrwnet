@@ -376,22 +376,25 @@ def create_cylinder_at_position(center, radius, height, direction):
     cylinder = pv.Cylinder(center=center, direction=direction, radius=radius, height=height)
     return cylinder
 
-def compute_cylinder_position_and_direction(segment):
+def compute_cylinder_position_and_direction(segment, radii):
     """
     Computes the cylinder placement at 1/3 length from the end point
     and calculates the normal direction using points within the last 1/3 length.
 
     Args:
         segment (list of tuples): The centerline segment.
+        radii (list of floats): The corresponding radius values.
 
     Returns:
-        tuple: Cylinder center position, max radius for scaling, and normal direction.
+        tuple: Cylinder center position, computed radius, normal direction.
     """
-    if len(segment) < 3:
-        return None, None, None  # Not enough points
+    if len(segment) < 6:
+        return None, None, None, None  # Not enough points
 
     # Convert segment to numpy array
     segment = np.array(segment)
+    radii = np.array(radii)
+    max_radius = radii.max()
 
     # Compute total segment length
     distances = np.linalg.norm(np.diff(segment, axis=0), axis=1)
@@ -410,32 +413,36 @@ def compute_cylinder_position_and_direction(segment):
             if len(last_segment_part) > 1:
                 direction_vector = last_segment_part[-1] - last_segment_part[0]
                 direction_vector = direction_vector / np.linalg.norm(direction_vector)  # Normalize
-            return segment[i], np.max(distances), direction_vector
 
-    return segment[0], np.max(distances), None  # Default to first point
+            # Get cylinder radius from provided radii
+            cylinder_radius = 1.5 * max_radius
+            cylinder_height = 0.1 * max_radius
 
-def display_3d_surface(surface, centerlines):
+            return segment[i], cylinder_radius, cylinder_height, direction_vector
+
+    return segment[0], 1.5 * max_radius, 0.1 * max_radius, None  # Default to first point
+
+def display_3d_surface(surface, centerlines, centerlines_radii):
     """
     Displays the extracted surface along with centerlines and cylinders.
 
     Args:
         surface (vtkPolyData): Extracted isosurface.
         centerlines (list of lists): Centerlines (list of 3D point lists).
+        centerlines_radii (list of lists): Radii corresponding to centerline points.
     """
     plotter = pv.Plotter()
     plotter.add_mesh(pv.wrap(surface), color="white", opacity=0.5, show_edges=True)
 
     # Add centerlines
-    for segment in centerlines:
+    for segment, radii in zip(centerlines, centerlines_radii):
         if len(segment) > 1:
             line = pv.lines_from_points(np.array(segment))
             plotter.add_mesh(line, color="red", line_width=3)
 
             # Compute cylinder placement and direction
-            cylinder_center, max_radius, normal_direction = compute_cylinder_position_and_direction(segment)
+            cylinder_center, cylinder_radius, cylinder_height, normal_direction = compute_cylinder_position_and_direction(segment, radii)
             if cylinder_center is not None and normal_direction is not None:
-                cylinder_radius = 2.0 * max_radius  # 1.5x max radius
-                cylinder_height = 0.1 * max_radius  # 0.1x max radius
                 cylinder = create_cylinder_at_position(cylinder_center, cylinder_radius, cylinder_height, normal_direction)
                 plotter.add_mesh(cylinder, color="blue")
 

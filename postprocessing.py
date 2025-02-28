@@ -182,6 +182,7 @@ os.makedirs(output_dir, exist_ok=True)
 
 # Assign each 3D point to the closest voxel and store its radius
 seg_3d_points_all = []
+seg_radius_all = []
 for idx, seg in enumerate(seg_sphere_points):
 
     obj_filename = os.path.join(output_dir, f"segment_{idx}.obj")
@@ -203,6 +204,7 @@ for idx, seg in enumerate(seg_sphere_points):
                 seg_3d_points.append(point3d)
 
         seg_3d_points_all.append(seg_3d_points)
+        seg_radius_all.append(radius_array)
 
         for point3d in seg_3d_points:
             f.write(f"v {point3d[0]} {point3d[1]} {point3d[2]}\n")
@@ -248,9 +250,14 @@ largest_region = preprocess_surface(largest_region)
 implicit_distance = create_implicit_distance_function(largest_region)
 
 # Keep only terminal segments where all points are geometrically enclosed in the largest surface
-filtered_terminal_centerlines = [
-    segment for segment, is_terminal in zip(seg_3d_points_all, terminal)
-    if is_terminal and is_segment_inside_surface(segment, implicit_distance)
-]
+filtered_terminal_centerlines = []
+filtered_terminal_centerlines_radius = []
 
-display_3d_surface(largest_region, filtered_terminal_centerlines)
+for segment, radii, is_terminal in zip(seg_3d_points_all, seg_radius_all, terminal):
+    if is_terminal and is_segment_inside_surface(segment, implicit_distance):
+        segment, radius = smooth_and_resample_segment(segment,radii,spacing=2,smoothing=0.5)
+        radius = (-np.array(radius)).tolist()
+        filtered_terminal_centerlines.append(segment)
+        filtered_terminal_centerlines_radius.append(radius)
+
+display_3d_surface(largest_region, filtered_terminal_centerlines, filtered_terminal_centerlines_radius)
