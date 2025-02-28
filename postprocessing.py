@@ -5,11 +5,14 @@ from skimage.morphology import skeletonize
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.ndimage import distance_transform_edt
 
+from scipy.spatial import Delaunay
+
 import sys
 import os
 
 from post_utils import extract_segments, smooth_and_resample_segment
 from post_utils import display_3d_surface,extract_isosurface,load_vti_or_image, get_largest_connected_region
+from post_utils import is_segment_inside_surface, create_implicit_distance_function, preprocess_surface
 
 # Get the parent directory of the current script (assuming project-root is the common parent)
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -239,9 +242,15 @@ isosurface = extract_isosurface(vtk_image, iso_value=0)
 # Extract only the largest connected region
 largest_region = get_largest_connected_region(isosurface)
 
-terminal_centerlines = [seg_3d_points_all[i] for i, is_terminal in enumerate(terminal) if is_terminal]
+largest_region = preprocess_surface(largest_region)
 
-# Display the extracted surface
-display_3d_surface(largest_region, terminal_centerlines)
+# Compute implicit distance function for the surface
+implicit_distance = create_implicit_distance_function(largest_region)
 
-# for those c
+# Keep only terminal segments where all points are geometrically enclosed in the largest surface
+filtered_terminal_centerlines = [
+    segment for segment, is_terminal in zip(seg_3d_points_all, terminal)
+    if is_terminal and is_segment_inside_surface(segment, implicit_distance)
+]
+
+display_3d_surface(largest_region, filtered_terminal_centerlines)

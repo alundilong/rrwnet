@@ -5,6 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import splprep, splev, interp1d
 
+
+
 def remove_duplicate_points(segment, max_distance = 2):
     """
     Removes duplicate points from a 3D segment while preserving order.
@@ -280,19 +282,95 @@ def get_largest_connected_region(surface):
     connectivity_filter.Update()
     return connectivity_filter.GetOutput()
 
-def display_3d_surface(surface, terminal_segments):
+def preprocess_surface(surface):
     """
-    Displays the extracted surface along with terminal centerlines.
-    
+    Ensures the surface is watertight and has normals.
+
     Args:
         surface (vtkPolyData): Extracted isosurface.
-        terminal_segments (list of lists): Terminal centerlines (list of 3D point lists).
+
+    Returns:
+        vtkPolyData: Processed watertight surface.
+    """
+    # Check for open edges
+    feature_edges = vtk.vtkFeatureEdges()
+    feature_edges.SetInputData(surface)
+    feature_edges.BoundaryEdgesOn()
+    feature_edges.FeatureEdgesOff()
+    feature_edges.NonManifoldEdgesOff()
+    feature_edges.ManifoldEdgesOff()
+    feature_edges.Update()
+
+    if feature_edges.GetOutput().GetNumberOfPoints() > 0:
+        # Surface has holes, fill them
+        hole_filler = vtk.vtkFillHolesFilter()
+        hole_filler.SetInputData(surface)
+        hole_filler.SetHoleSize(100000.0)  # Large enough to fill major gaps
+        hole_filler.Update()
+        surface = hole_filler.GetOutput()
+
+    # Ensure normals are computed
+    normals = vtk.vtkPolyDataNormals()
+    normals.SetInputData(surface)
+    normals.SetConsistency(True)
+    normals.SetSplitting(False)
+    normals.Update()
+    
+    return normals.GetOutput()
+
+def is_point_inside_surface(point, implicit_distance):
+    """
+    Checks if a given 3D point is inside a surface using `vtkImplicitPolyDataDistance`.
+
+    Args:
+        point (tuple): A 3D point (x, y, z).
+        implicit_distance (vtkImplicitPolyDataDistance): Distance function.
+
+    Returns:
+        bool: True if the point is inside, False otherwise.
+    """
+    return implicit_distance.EvaluateFunction(point) > 0  # Positive means inside
+
+def is_segment_inside_surface(segment, implicit_distance):
+    """
+    Checks if all points of a segment are enclosed within a surface.
+
+    Args:
+        segment (list of tuples): A list of 3D points forming the segment.
+        implicit_distance (vtkImplicitPolyDataDistance): Distance function.
+
+    Returns:
+        bool: True if all points of the segment are inside the surface, False otherwise.
+    """
+    return all(is_point_inside_surface(point, implicit_distance) for point in segment)
+
+def create_implicit_distance_function(surface):
+    """
+    Creates an implicit function to check if points are inside a closed 3D surface.
+
+    Args:
+        surface (vtkPolyData): Extracted isosurface.
+
+    Returns:
+        vtkImplicitPolyDataDistance: Implicit distance function.
+    """
+    implicit_distance = vtk.vtkImplicitPolyDataDistance()
+    implicit_distance.SetInput(surface)
+    return implicit_distance
+
+def display_3d_surface(surface, centerlines):
+    """
+    Displays the extracted surface along with centerlines.
+
+    Args:
+        surface (vtkPolyData): Extracted isosurface.
+        centerlines (list of lists): Centerlines (list of 3D point lists).
     """
     plotter = pv.Plotter()
     plotter.add_mesh(pv.wrap(surface), color="white", opacity=0.5, show_edges=True)
 
-    # Add terminal centerlines
-    for segment in terminal_segments:
+    # Add centerlines
+    for segment in centerlines:
         if len(segment) > 1:
             line = pv.lines_from_points(np.array(segment))
             plotter.add_mesh(line, color="red", line_width=3)
