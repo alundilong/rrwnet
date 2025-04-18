@@ -5,33 +5,68 @@ This is the official repository of the paper ["RRWNet: Recursive Refinement Netw
 [[`arXiv`](https://doi.org/10.48550/arXiv.2402.03166)] [`ESWA`](https://doi.org/10.1016/j.eswa.2024.124970)] [[`BibTeX`](#citation)]
 
 
+## Highlights
+
+* Human-level, state-of-the-art performance on retinal artery/vein segmentation and classification.
+    + Evaluated on three public datasets: RITE, LES-AV, and HRF.
+* Novel recursive framework for solving manifest errors in semantic segmentation maps.
+    + First framework to combine module stacking and recursive refinement approaches.
+* Stand-alone recursive refinement module for post-processing artery/vein segmentation maps.
+
+
+
+## Overview
+
 ![Graphical_abstract](https://github.com/j-morano/rrwnet/assets/48717183/a573ce81-1b15-4dad-8cd7-c55bb1a049ef)
 
 
-This approach builds on our previous work presented in the paper ["Simultaneous segmentation and classification of the retinal arteries and veins from color fundus images"](https://doi.org/10.1016/j.artmed.2021.102116).
+## Previous work
+
+This approach builds on our previous work presented in the paper ["Simultaneous segmentation and classification of the retinal arteries and veins from color fundus images"](https://doi.org/10.1016/j.artmed.2021.102116), published in _Artificial Intelligence in Medicine_ (2021).
 
 
-## TODO
+## Basic usage
 
-- [x] Basic inference code.
-- [x] Training code.
-- [x] Preprocessed training and testing data.
-- [x] Data preprocessing code.
-- [x] Evaluation code.
-- [x] Better documentation.
-- [x] Single model evaluation.
-- [x] Easier execution of the evaluation.
+The models can be easily used with the `model.py` code and loading the weights with Hugging Face 🤗. The only requirement is to have the `torch`, `huggingface_hub`, and `safetensors` packages installed.
+
+```python
+from huggingface_hub import PyTorchModelHubMixin
+from model import RRWNet as RRWNetModel
+
+
+class RRWNet(RRWNetModel, PyTorchModelHubMixin):
+    def __init__(self, input_ch=3, output_ch=3, base_ch=64, iterations=5):
+        super().__init__(input_ch, output_ch, base_ch, iterations)
+
+
+model = RRWNet.from_pretrained("j-morano/rrwnet-rite")
+# or rrwnet-hrf for the HRF dataset
+```
 
 
 ## Predictions and weights
 
-The predictions for the different datasets as well as the weights for the proposed RRWNet model can be found at the following link:
+The predictions for the different datasets as well as the weights for the proposed RRWNet model can be found at the following links:
 
-- <https://drive.google.com/drive/folders/1Pz0z-OxzEft5EWGbZ3MeeqQNWqvv2ese?usp=sharing>
+- GitHub (release assets):
+  + Weights: <https://github.com/j-morano/rrwnet/releases/tag/weights>
+  + Predictions: <https://github.com/j-morano/rrwnet/releases/download/preds-n-data/Predictions.zip>
 
 
 The model trained on the RITE dataset was trained using the original image resolution, while the model trained on HRF was trained using images resized to a width of 1024 pixels. The weights for the RITE dataset are named `rrwnet_RITE_1.pth`, while the weights for the HRF dataset are named `rrwnet_HRF_0.pth`.
 Please note that the size of the images used for training is important when using the weights for predictions.
+
+
+## Data format
+
+Our code always expects the images to be RGB images with pixel values in the range [0, 255] and the masks to be RGB images with the following segmentation maps in each channel:
+
+* Red channel: Arteries
+* Green channel: Veins
+* Blue channel: Vessels (union of arteries and veins)
+
+The masks should be binary images with pixel values in the range [0, 255].
+The predictions will be saved in the same format as the masks.
 
 
 ## Setting up the environment
