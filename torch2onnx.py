@@ -3,6 +3,7 @@ import argparse
 
 import torch
 from skimage import io
+import numpy as np
 
 from model import RRWNet
 from utils import pad_images_unet, to_torch_tensors
@@ -76,27 +77,35 @@ if __name__ == '__main__':
 
     # We'll use the first image to create our example tensor for ONNX export
     if image_fns:
-        example_image_fn = image_fns[0]
-        example_mask_fn = mask_fns[0]
+        image_fn = image_fns[0]
+        mask_fn = mask_fns[0]
         
-        print(f'Processing example image {example_image_fn.name} for ONNX export')
+        print(f'Processing example image {image_fn.name} for ONNX export')
         
-        img = (io.imread(example_image_fn) / 255.0)[..., :3]
-        mask = io.imread(example_mask_fn) * 1.0
+        img = (io.imread(image_fn) / 255.0)[..., :3]
+        mask = io.imread(mask_fn) * 1.0
             
         # Process through the same pipeline as normal inference
         imgs, paddings = pad_images_unet([img, mask])
         img = imgs[0]
-        tensors = to_torch_tensors([img])
+        padding = paddings[0]
+        mask = imgs[1]
+        mask = np.stack([mask,] * 3, axis=2)
+        mask_padding = paddings[1]
+        tensors = to_torch_tensors([img, mask])
         image_tensor = tensors[0]
+        mask_tensor = tensors[1]
+        if torch.cuda.is_available():
+            image_tensor = image_tensor.cuda()
+        else:
+            tensor = image_tensor.cpu()
+        image_tensor = image_tensor.unsqueeze(0)
+        mask_tensor = mask_tensor.unsqueeze(0)
         
         if device == 'cuda':
             image_tensor = image_tensor.cuda()
         else:
             image_tensor = image_tensor.cpu()
-            
-        # Add batch dimension
-        image_tensor = image_tensor.unsqueeze(0)
         
         # Export to ONNX using this processed tensor as example
         export_to_onnx(model, image_tensor, output_path=save_path)

@@ -9,3 +9,4 @@ tmp/
 predictions_HRF_0/
 predictions_RITE_1/
 predictions_RITE_refinement/
+predictions_onnx/
